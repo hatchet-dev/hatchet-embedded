@@ -27,11 +27,8 @@ import (
 	_ "github.com/hatchet-dev/hatchet-embedded"
 )
 
-client, err := hatchet.NewClient(...)
+client, err := hatchet.NewClient(hatchet.WithEmbedded())
 ```
-
-Embedded mode is enabled through the SDK's client options / environment; without
-the blank import the SDK returns an error asking for it.
 
 ## Options
 

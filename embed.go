@@ -13,6 +13,7 @@ import (
 
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 
 	adminseed "github.com/hatchet-dev/hatchet/cmd/hatchet-admin/cli/seed"
 	api "github.com/hatchet-dev/hatchet/cmd/hatchet-api/api"
@@ -90,9 +91,11 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 		return nil, err
 	}
 
+	lg := resolveLogger(cfg)
+
 	var pg *embeddedpostgres.EmbeddedPostgres
 	if strings.TrimSpace(cfg.postgresURL) == "" {
-		pg, cfg.postgresURL, err = startEmbeddedPostgres()
+		pg, cfg.postgresURL, err = startEmbeddedPostgres(lg)
 		if err != nil {
 			return nil, err
 		}
@@ -126,9 +129,9 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 	}
 
 	if cfg.masterKeyset == nil || len(*cfg.masterKeyset) == 0 {
-		fmt.Fprintf(os.Stderr, "embed: using auto-managed keysets stored in the %q schema; "+
+		lg.Warn().Msgf("using auto-managed keysets stored in the %q schema; "+
 			"at-rest encryption offers no additional protection here because the keys live in the same database as the data they encrypt. "+
-			"Pass WithKeysets to manage keys externally.\n", keyset.DefaultSchema)
+			"Pass WithKeysets to manage keys externally.", keyset.DefaultSchema)
 		ks, keysetErr := keyset.Resolve(ctx, cfg.postgresURL)
 		if keysetErr != nil {
 			return nil, keysetErr
@@ -206,7 +209,7 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 
 	fleetSize, err := activeFleetSize(ctx, dc.Pool)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "embed: could not read fleet size: %v\n", err)
+		lg.Warn().Err(err).Msg("could not read fleet size")
 	}
 
 	tokenCleanup, sc, err := cf.CreateServerFromConfig(*cfg.version, override)
@@ -242,7 +245,7 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 	go func() {
 		defer wg.Done()
 		if runErr := engine.Run(engineCtx, cf, *cfg.version, override); runErr != nil {
-			fmt.Fprintf(os.Stderr, "embed: engine exited: %v\n", runErr)
+			lg.Error().Err(runErr).Msg("engine exited")
 		}
 	}()
 
@@ -251,7 +254,7 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 		go func() {
 			defer wg.Done()
 			if startErr := api.Start(cf, interruptCh, *cfg.version, override); startErr != nil {
-				fmt.Fprintf(os.Stderr, "embed: api exited: %v\n", startErr)
+				lg.Error().Err(startErr).Msg("api exited")
 			}
 		}()
 	}
@@ -282,7 +285,7 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 	if startServerAPI {
 		apiStatus = apiURL
 	}
-	fmt.Fprintf(os.Stderr, "embed engine ready: grpc=%s api=%s | %s\n", grpcBroadcast, apiStatus, fleetStatus)
+	lg.Info().Msgf("engine ready: grpc=%s api=%s | %s", grpcBroadcast, apiStatus, fleetStatus)
 
 	instanceAPIURL := ""
 	if startServerAPI {
@@ -301,7 +304,7 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 	}, nil
 }
 
-func startEmbeddedPostgres() (*embeddedpostgres.EmbeddedPostgres, string, error) {
+func startEmbeddedPostgres(lg *zerolog.Logger) (*embeddedpostgres.EmbeddedPostgres, string, error) {
 	port, err := freePort()
 	if err != nil {
 		return nil, "", fmt.Errorf("could not allocate a Postgres port: %w", err)
@@ -310,14 +313,16 @@ func startEmbeddedPostgres() (*embeddedpostgres.EmbeddedPostgres, string, error)
 	pg := embeddedpostgres.NewDatabase(
 		embeddedpostgres.DefaultConfig().
 			Port(uint32(port)).
-			Database("hatchet"),
+			Database("hatchet").
+			StartParameters(map[string]string{"timezone": "UTC"}).
+			Logger(pgLogWriter{lg}),
 	)
 	if startErr := pg.Start(); startErr != nil {
 		return nil, "", fmt.Errorf("could not start embedded Postgres: %w", startErr)
 	}
 
 	url := fmt.Sprintf("postgres://postgres:postgres@localhost:%d/hatchet?sslmode=disable", port)
-	fmt.Fprintf(os.Stderr, "embed: started embedded Postgres on port %d (pass WithPostgres to use your own)\n", port)
+	lg.Info().Msgf("started embedded Postgres on port %d (pass WithPostgres to use your own)", port)
 	return pg, url, nil
 }
 

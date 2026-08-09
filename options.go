@@ -1,6 +1,10 @@
 package embed
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/rs/zerolog"
+)
 
 type Config struct {
 	postgresURL      string
@@ -9,6 +13,7 @@ type Config struct {
 	adminPassword    *string
 	version          *string
 	logLevel         *string
+	logger           *zerolog.Logger
 	masterKeyset     *[]byte
 	privateJWTKeyset *[]byte
 	publicJWTKeyset  *[]byte
@@ -69,6 +74,12 @@ func WithAdminUser(email, password string) Option {
 
 func WithLogLevel(level string) Option {
 	return func(c *Config) { c.logLevel = &level }
+}
+
+// WithLogger routes embed's logging (and the bundled Postgres output) through a
+// caller-supplied logger instead of the default one derived from the log level.
+func WithLogger(l *zerolog.Logger) Option {
+	return func(c *Config) { c.logger = l }
 }
 
 func (c *Config) validate() error {
