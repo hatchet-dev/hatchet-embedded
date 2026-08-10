@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -19,10 +20,11 @@ import (
 	api "github.com/hatchet-dev/hatchet/cmd/hatchet-api/api"
 	engine "github.com/hatchet-dev/hatchet/cmd/hatchet-engine/engine"
 	migrate "github.com/hatchet-dev/hatchet/cmd/hatchet-migrate/migrate"
-	"github.com/hatchet-dev/hatchet-embedded/keyset"
 	"github.com/hatchet-dev/hatchet/pkg/config/loader"
 	"github.com/hatchet-dev/hatchet/pkg/config/server"
 	hatchet "github.com/hatchet-dev/hatchet/sdks/go"
+
+	"github.com/hatchet-dev/hatchet-embedded/keyset"
 )
 
 type Instance struct {
@@ -308,6 +310,9 @@ func startEmbeddedPostgres(lg *zerolog.Logger) (*embeddedpostgres.EmbeddedPostgr
 	port, err := freePort()
 	if err != nil {
 		return nil, "", fmt.Errorf("could not allocate a Postgres port: %w", err)
+	}
+	if port < 0 || port > math.MaxUint16 {
+		return nil, "", fmt.Errorf("allocated Postgres port %d out of range", port)
 	}
 
 	pg := embeddedpostgres.NewDatabase(
