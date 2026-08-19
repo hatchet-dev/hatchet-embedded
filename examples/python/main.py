@@ -1,9 +1,11 @@
+import os
 import threading
 import time
 
-from hatchet_sdk import Context, EmptyModel, Hatchet
+from hatchet_sdk import Context, EmptyModel
+from hatchet_sdk.embedded import HatchetEmbedded
 
-hatchet = Hatchet.embedded()
+hatchet = HatchetEmbedded()
 
 
 class GreetInput(EmptyModel):
@@ -21,7 +23,11 @@ def main() -> None:
     time.sleep(2)
 
     result = greet.run(GreetInput(name="embed"))
-    print(result["greeting"])
+    print(result["greeting"], flush=True)
+
+    # the worker's subprocesses would otherwise keep the interpreter alive at
+    # exit; the sidecar still shuts down cleanly via its stdin pipe
+    os._exit(0)
 
 
 if __name__ == "__main__":

@@ -20,20 +20,24 @@ import (
 client, err := hatchet.NewClient(hatchet.WithEmbedded())
 ```
 
-TypeScript:
+TypeScript (a separate entry point, so it never ends up in production bundles):
 
 ```ts
-import { HatchetClient } from '@hatchet-dev/typescript-sdk/v1';
+import { HatchetEmbeddedClient } from '@hatchet-dev/typescript-sdk/embedded';
 
-const hatchet = await HatchetClient.embedded();
+const hatchet = await HatchetEmbeddedClient.init();
 ```
 
-Python:
+Python (a separate import path, loaded only when you use it):
+
+```sh
+pip install hatchet-sdk[embedded]
+```
 
 ```python
-from hatchet_sdk import Hatchet
+from hatchet_sdk.embedded import HatchetEmbedded
 
-hatchet = Hatchet.embedded()
+hatchet = HatchetEmbedded()
 ```
 
 Runnable examples for all three live in [examples](examples/).

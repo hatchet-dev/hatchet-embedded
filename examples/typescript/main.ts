@@ -1,7 +1,7 @@
-import { HatchetClient } from '@hatchet-dev/typescript-sdk/v1';
+import { HatchetEmbeddedClient } from '@hatchet-dev/typescript-sdk/embedded';
 
 async function main() {
-  const hatchet = await HatchetClient.embedded();
+  const hatchet = await HatchetEmbeddedClient.init();
 
   const greet = hatchet.task({
     name: 'greet',
