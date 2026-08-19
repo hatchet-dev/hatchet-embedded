@@ -23,7 +23,7 @@ client, err := hatchet.NewClient(hatchet.WithEmbedded())
 TypeScript (a separate entry point, so it never ends up in production bundles):
 
 ```ts
-import { HatchetEmbeddedClient } from '@hatchet-dev/typescript-sdk/embedded';
+import { HatchetEmbeddedClient } from '@hatchet-dev/typescript-sdk/v1/embedded';
 
 const hatchet = await HatchetEmbeddedClient.init();
 ```
