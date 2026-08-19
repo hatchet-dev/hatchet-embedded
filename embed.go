@@ -83,7 +83,7 @@ func (i *Instance) stopPostgres() error {
 	return err
 }
 
-func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
+func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 	cfg := defaultConfig()
 	for _, opt := range opts {
 		opt(cfg)
@@ -331,12 +331,8 @@ func startEmbeddedPostgres(lg *zerolog.Logger) (*embeddedpostgres.EmbeddedPostgr
 	return pg, url, nil
 }
 
-func StartServer(ctx context.Context, opts ...Option) (*Instance, error) {
-	return start(ctx, opts...)
-}
-
 func Start(ctx context.Context, opts ...Option) (*Instance, error) {
-	inst, err := start(ctx, opts...)
+	inst, err := StartServer(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
