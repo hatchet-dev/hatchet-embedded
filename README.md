@@ -5,7 +5,7 @@ API, and gRPC) from your application — in-process from Go, or as a sidecar
 process from the TypeScript and Python SDKs. By default it also starts a
 bundled Postgres, so you need zero external services to get running.
 
-**Full documentation: [docs.hatchet.run/self-hosting/embedded](https://docs.hatchet.run/self-hosting/embedded)**
+**Full documentation: [docs.hatchet.run/v1/embedded](https://docs.hatchet.run/v1/embedded)**
 
 ## Quickstart
 
