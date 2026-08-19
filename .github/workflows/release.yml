@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*"
+      - "!v*-alpha*"
+      - "!v*-rc*"
   workflow_dispatch:
     inputs:
       tag:
@@ -34,6 +36,19 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      # Release tags correspond to the Hatchet engine version baked into the
+      # sidecar: vX.Y.Z, or vX.Y.Z-N for sidecar-only fixes on the same engine.
+      - name: Verify tag matches the embedded Hatchet version
+        run: |
+          dep=$(go list -m -f '{{.Version}}' github.com/hatchet-dev/hatchet)
+          case "$GITHUB_TAG" in
+            "$dep" | "$dep"-*) echo "tag $GITHUB_TAG corresponds to hatchet $dep" ;;
+            *)
+              echo "tag $GITHUB_TAG does not correspond to the embedded hatchet version $dep"
+              exit 1
+              ;;
+          esac
 
       - name: Install quill (for macOS code signing)
         run: |

@@ -49,8 +49,11 @@ notarize:
         wait: true
         timeout: 20m
 
+# prerelease: auto would misclassify vX.Y.Z-N sidecar-fix tags as prereleases
+# and hide them from the "latest" release the SDKs resolve; engine prereleases
+# are filtered out at the workflow trigger instead
 release:
   github:
     owner: hatchet-dev
     name: hatchet-embedded
-  prerelease: auto
+  prerelease: "false"
