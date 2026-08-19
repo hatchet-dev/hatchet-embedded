@@ -184,6 +184,7 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 		scf.Runtime.GRPCBroadcastAddress = grpcBroadcast
 		scf.Runtime.GRPCInsecure = true
 		scf.Runtime.Healthcheck = false
+		scf.Runtime.Embedded = true
 
 		scf.SecurityCheck.Enabled = false
 
