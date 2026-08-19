@@ -331,6 +331,10 @@ func startEmbeddedPostgres(lg *zerolog.Logger) (*embeddedpostgres.EmbeddedPostgr
 	return pg, url, nil
 }
 
+func StartServer(ctx context.Context, opts ...Option) (*Instance, error) {
+	return start(ctx, opts...)
+}
+
 func Start(ctx context.Context, opts ...Option) (*Instance, error) {
 	inst, err := start(ctx, opts...)
 	if err != nil {
