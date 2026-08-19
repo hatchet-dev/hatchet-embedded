@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	postgresURL      string
+	postgresDataDir  string
 	rabbitMQURL      *string
 	adminEmail       *string
 	adminPassword    *string
@@ -35,6 +36,13 @@ func defaultConfig() *Config {
 
 func WithPostgres(url string) Option {
 	return func(c *Config) { c.postgresURL = url }
+}
+
+// WithPostgresDataDir stores the bundled Postgres runtime and data under dir
+// instead of the default per-project directory derived from the working
+// directory. Two instances must not share a data dir concurrently.
+func WithPostgresDataDir(dir string) Option {
+	return func(c *Config) { c.postgresDataDir = dir }
 }
 
 func WithKeysets(master, privateJWT, publicJWT []byte) Option {

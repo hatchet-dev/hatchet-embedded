@@ -35,6 +35,7 @@ func run() error {
 	apiPort := flag.Int("api-port", 0, "bind the REST API to this port")
 	noAPI := flag.Bool("no-api", false, "start only the engine + gRPC, no REST API")
 	noMigrations := flag.Bool("no-migrations", false, "skip running migrations on startup")
+	postgresDataDir := flag.String("postgres-data-dir", "", "store the bundled Postgres runtime and data under this directory")
 	logLevel := flag.String("log-level", "", "engine log level")
 	handshakeFile := flag.String("handshake-file", "", "write connection info as JSON to this file once ready")
 	flag.Parse()
@@ -49,6 +50,9 @@ func run() error {
 	}
 	if *rabbitMQURL != "" {
 		opts = append(opts, embed.WithRabbitMQ(*rabbitMQURL))
+	}
+	if *postgresDataDir != "" {
+		opts = append(opts, embed.WithPostgresDataDir(*postgresDataDir))
 	}
 	if *grpcPort != 0 {
 		opts = append(opts, embed.WithGRPCPort(*grpcPort))

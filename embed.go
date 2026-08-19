@@ -3,11 +3,13 @@ package embed
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -97,7 +99,7 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 
 	var pg *embeddedpostgres.EmbeddedPostgres
 	if strings.TrimSpace(cfg.postgresURL) == "" {
-		pg, cfg.postgresURL, err = startEmbeddedPostgres(lg)
+		pg, cfg.postgresURL, err = startEmbeddedPostgres(lg, cfg.postgresDataDir)
 		if err != nil {
 			return nil, err
 		}
@@ -306,7 +308,7 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	}, nil
 }
 
-func startEmbeddedPostgres(lg *zerolog.Logger) (*embeddedpostgres.EmbeddedPostgres, string, error) {
+func startEmbeddedPostgres(lg *zerolog.Logger, baseDir string) (*embeddedpostgres.EmbeddedPostgres, string, error) {
 	port, err := freePort()
 	if err != nil {
 		return nil, "", fmt.Errorf("could not allocate a Postgres port: %w", err)
@@ -315,10 +317,19 @@ func startEmbeddedPostgres(lg *zerolog.Logger) (*embeddedpostgres.EmbeddedPostgr
 		return nil, "", fmt.Errorf("allocated Postgres port %d out of range", port)
 	}
 
+	if baseDir == "" {
+		baseDir, err = defaultPostgresBaseDir()
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
 	pg := embeddedpostgres.NewDatabase(
 		embeddedpostgres.DefaultConfig().
 			Port(uint32(port)).
 			Database("hatchet").
+			RuntimePath(filepath.Join(baseDir, "runtime")).
+			DataPath(filepath.Join(baseDir, "data")).
 			StartParameters(map[string]string{"timezone": "UTC"}).
 			Logger(pgLogWriter{lg}),
 	)
@@ -327,8 +338,24 @@ func startEmbeddedPostgres(lg *zerolog.Logger) (*embeddedpostgres.EmbeddedPostgr
 	}
 
 	url := fmt.Sprintf("postgres://postgres:postgres@localhost:%d/hatchet?sslmode=disable", port)
-	lg.Info().Msgf("started embedded Postgres on port %d (pass WithPostgres to use your own)", port)
+	lg.Info().Msgf("started embedded Postgres on port %d with data in %s (pass WithPostgres to use your own)", port, baseDir)
 	return pg, url, nil
+}
+
+// defaultPostgresBaseDir keys the bundled Postgres directory by the working
+// directory so instances started from different projects never share a data
+// dir, while restarts from the same project keep their data.
+func defaultPostgresBaseDir() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("could not determine the working directory: %w", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine the home directory: %w", err)
+	}
+	sum := sha256.Sum256([]byte(cwd))
+	return filepath.Join(home, ".hatchet-embedded", hex.EncodeToString(sum[:6])), nil
 }
 
 func Start(ctx context.Context, opts ...Option) (*Instance, error) {
