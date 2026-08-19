@@ -154,7 +154,7 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 
 	apiPort := 0
 	if startServerAPI {
-		apiPort, err = resolvePort(cfg.apiPort)
+		apiPort, err = resolveAPIPort(cfg.apiPort)
 		if err != nil {
 			return nil, fmt.Errorf("could not allocate an API port: %w", err)
 		}
@@ -278,6 +278,9 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	_ = os.Setenv("HATCHET_CLIENT_HOST_PORT", grpcBroadcast)
 	_ = os.Setenv("HATCHET_CLIENT_TENANT_ID", tenantID)
 	_ = os.Setenv("HATCHET_CLIENT_TLS_STRATEGY", "none")
+	if startServerAPI {
+		_ = os.Setenv("HATCHET_CLIENT_SERVER_URL", apiURL)
+	}
 	if cfg.logLevel != nil && *cfg.logLevel != "" {
 		_ = os.Setenv("HATCHET_CLIENT_LOG_LEVEL", *cfg.logLevel)
 	}
@@ -290,7 +293,7 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	if startServerAPI {
 		apiStatus = apiURL
 	}
-	lg.Info().Msgf("engine ready: grpc=%s api=%s | %s", grpcBroadcast, apiStatus, fleetStatus)
+	lg.Log().Msgf("engine ready: grpc=%s api=%s | %s", grpcBroadcast, apiStatus, fleetStatus)
 
 	instanceAPIURL := ""
 	if startServerAPI {
@@ -381,6 +384,23 @@ func randomHex(n int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// DefaultAPIPort is the port the embedded API binds to when it is free, so
+// tooling like 'hatchet embedded-ui' can find an instance without
+// configuration. Additional instances fall back to a random free port. The
+// value avoids IANA-assigned services and the OS ephemeral range.
+const DefaultAPIPort = 28243
+
+func resolveAPIPort(explicit *int) (int, error) {
+	if explicit != nil {
+		return *explicit, nil
+	}
+	if l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", DefaultAPIPort)); err == nil {
+		_ = l.Close()
+		return DefaultAPIPort, nil
+	}
+	return freePort()
 }
 
 func resolvePort(explicit *int) (int, error) {
