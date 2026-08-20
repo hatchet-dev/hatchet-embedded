@@ -28,16 +28,12 @@ import { HatchetEmbeddedClient } from '@hatchet-dev/typescript-sdk/v1/embedded';
 const hatchet = await HatchetEmbeddedClient.init();
 ```
 
-Python (a separate import path, loaded only when you use it):
-
-```sh
-pip install hatchet-sdk[embedded]
-```
+Python:
 
 ```python
-from hatchet_sdk.embedded import HatchetEmbedded
+from hatchet_sdk import Hatchet
 
-hatchet = HatchetEmbedded()
+hatchet = Hatchet.from_embedded()
 ```
 
 Runnable examples for all three live in [examples](examples/).

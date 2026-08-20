@@ -2,10 +2,9 @@ import os
 import threading
 import time
 
-from hatchet_sdk import Context, EmptyModel
-from hatchet_sdk.embedded import HatchetEmbedded
+from hatchet_sdk import Context, EmptyModel, Hatchet
 
-hatchet = HatchetEmbedded()
+hatchet = Hatchet.from_embedded()
 
 
 class GreetInput(EmptyModel):

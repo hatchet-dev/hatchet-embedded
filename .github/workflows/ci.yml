@@ -45,7 +45,7 @@ jobs:
       - run: pip install -r examples/python/requirements.txt
       - name: run examples/python
         env:
-          HATCHET_EMBEDDED_BINARY_PATH: /tmp/hatchet-embedded-sidecar
+          HATCHET_CLIENT_EMBEDDED_BINARY_PATH: /tmp/hatchet-embedded-sidecar
         run: |
           out=$(timeout 300 python examples/python/main.py)
           echo "$out"
@@ -68,7 +68,7 @@ jobs:
       - name: run examples/typescript
         working-directory: examples/typescript
         env:
-          HATCHET_EMBEDDED_BINARY_PATH: /tmp/hatchet-embedded-sidecar
+          HATCHET_CLIENT_EMBEDDED_BINARY_PATH: /tmp/hatchet-embedded-sidecar
         run: |
           out=$(timeout 300 pnpm start)
           echo "$out"
