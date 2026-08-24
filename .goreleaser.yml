@@ -1,0 +1,59 @@
+version: 2
+
+project_name: hatchet-embedded
+
+builds:
+  - id: hatchet-embedded-sidecar
+    main: ./cmd/sidecar
+    binary: hatchet-embedded-sidecar
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    goamd64:
+      - v1
+    ldflags:
+      - -s -w
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: hatchet-embedded-sidecar
+    formats:
+      - binary
+    name_template: "hatchet-embedded-sidecar_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: github-native
+
+# Cross-platform signing and notarization with quill (works on any OS, including Linux)
+# This will sign and notarize all macOS binaries
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - hatchet-embedded-sidecar
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+        wait: true
+        timeout: 20m
+
+# prerelease: auto would misclassify vX.Y.Z-N sidecar-fix tags as prereleases
+# and hide them from the "latest" release the SDKs resolve; engine prereleases
+# are filtered out at the workflow trigger instead
+release:
+  github:
+    owner: hatchet-dev
+    name: hatchet-embedded
+  prerelease: "false"

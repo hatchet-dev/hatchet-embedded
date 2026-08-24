@@ -3,11 +3,13 @@ package embed
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -83,7 +85,7 @@ func (i *Instance) stopPostgres() error {
 	return err
 }
 
-func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
+func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 	cfg := defaultConfig()
 	for _, opt := range opts {
 		opt(cfg)
@@ -97,7 +99,7 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 
 	var pg *embeddedpostgres.EmbeddedPostgres
 	if strings.TrimSpace(cfg.postgresURL) == "" {
-		pg, cfg.postgresURL, err = startEmbeddedPostgres(lg)
+		pg, cfg.postgresURL, err = startEmbeddedPostgres(lg, cfg.postgresDataDir)
 		if err != nil {
 			return nil, err
 		}
@@ -151,11 +153,17 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 	}
 
 	apiPort := 0
+	var apiPortHold net.Listener
 	if startServerAPI {
-		apiPort, err = resolvePort(cfg.apiPort)
+		apiPort, apiPortHold, err = resolveAPIPort(cfg.apiPort)
 		if err != nil {
 			return nil, fmt.Errorf("could not allocate an API port: %w", err)
 		}
+		defer func() {
+			if err != nil && apiPortHold != nil {
+				_ = apiPortHold.Close()
+			}
+		}()
 	}
 
 	grpcBroadcast := fmt.Sprintf("127.0.0.1:%d", grpcPort)
@@ -182,6 +190,7 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 		scf.Runtime.GRPCBroadcastAddress = grpcBroadcast
 		scf.Runtime.GRPCInsecure = true
 		scf.Runtime.Healthcheck = false
+		scf.Runtime.Embedded = true
 
 		scf.SecurityCheck.Enabled = false
 
@@ -252,6 +261,9 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 	}()
 
 	if startServerAPI {
+		if apiPortHold != nil {
+			_ = apiPortHold.Close()
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -275,6 +287,9 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 	_ = os.Setenv("HATCHET_CLIENT_HOST_PORT", grpcBroadcast)
 	_ = os.Setenv("HATCHET_CLIENT_TENANT_ID", tenantID)
 	_ = os.Setenv("HATCHET_CLIENT_TLS_STRATEGY", "none")
+	if startServerAPI {
+		_ = os.Setenv("HATCHET_CLIENT_SERVER_URL", apiURL)
+	}
 	if cfg.logLevel != nil && *cfg.logLevel != "" {
 		_ = os.Setenv("HATCHET_CLIENT_LOG_LEVEL", *cfg.logLevel)
 	}
@@ -287,7 +302,7 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 	if startServerAPI {
 		apiStatus = apiURL
 	}
-	lg.Info().Msgf("engine ready: grpc=%s api=%s | %s", grpcBroadcast, apiStatus, fleetStatus)
+	lg.Log().Msgf("engine ready: grpc=%s api=%s | %s", grpcBroadcast, apiStatus, fleetStatus)
 
 	instanceAPIURL := ""
 	if startServerAPI {
@@ -306,7 +321,7 @@ func start(ctx context.Context, opts ...Option) (inst *Instance, err error) {
 	}, nil
 }
 
-func startEmbeddedPostgres(lg *zerolog.Logger) (*embeddedpostgres.EmbeddedPostgres, string, error) {
+func startEmbeddedPostgres(lg *zerolog.Logger, baseDir string) (*embeddedpostgres.EmbeddedPostgres, string, error) {
 	port, err := freePort()
 	if err != nil {
 		return nil, "", fmt.Errorf("could not allocate a Postgres port: %w", err)
@@ -315,10 +330,19 @@ func startEmbeddedPostgres(lg *zerolog.Logger) (*embeddedpostgres.EmbeddedPostgr
 		return nil, "", fmt.Errorf("allocated Postgres port %d out of range", port)
 	}
 
+	if baseDir == "" {
+		baseDir, err = defaultPostgresBaseDir()
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
 	pg := embeddedpostgres.NewDatabase(
 		embeddedpostgres.DefaultConfig().
 			Port(uint32(port)).
 			Database("hatchet").
+			RuntimePath(filepath.Join(baseDir, "runtime")).
+			DataPath(filepath.Join(baseDir, "data")).
 			StartParameters(map[string]string{"timezone": "UTC"}).
 			Logger(pgLogWriter{lg}),
 	)
@@ -327,12 +351,28 @@ func startEmbeddedPostgres(lg *zerolog.Logger) (*embeddedpostgres.EmbeddedPostgr
 	}
 
 	url := fmt.Sprintf("postgres://postgres:postgres@localhost:%d/hatchet?sslmode=disable", port)
-	lg.Info().Msgf("started embedded Postgres on port %d (pass WithPostgres to use your own)", port)
+	lg.Info().Msgf("started embedded Postgres on port %d with data in %s (pass WithPostgres to use your own)", port, baseDir)
 	return pg, url, nil
 }
 
+// defaultPostgresBaseDir keys the bundled Postgres directory by the working
+// directory so instances started from different projects never share a data
+// dir, while restarts from the same project keep their data.
+func defaultPostgresBaseDir() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("could not determine the working directory: %w", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine the home directory: %w", err)
+	}
+	sum := sha256.Sum256([]byte(cwd))
+	return filepath.Join(home, ".hatchet-embedded", hex.EncodeToString(sum[:6])), nil
+}
+
 func Start(ctx context.Context, opts ...Option) (*Instance, error) {
-	inst, err := start(ctx, opts...)
+	inst, err := StartServer(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -353,6 +393,23 @@ func randomHex(n int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// DefaultAPIPort is the port the embedded API binds to when it is free, so
+// tooling like 'hatchet embedded-ui' can find an instance without
+// configuration. Additional instances fall back to a random free port. The
+// value avoids IANA-assigned services and the OS ephemeral range.
+const DefaultAPIPort = 28243
+
+func resolveAPIPort(explicit *int) (int, net.Listener, error) {
+	if explicit != nil {
+		return *explicit, nil, nil
+	}
+	if l, err := net.Listen("tcp", fmt.Sprintf(":%d", DefaultAPIPort)); err == nil {
+		return DefaultAPIPort, l, nil
+	}
+	port, err := freePort()
+	return port, nil, err
 }
 
 func resolvePort(explicit *int) (int, error) {

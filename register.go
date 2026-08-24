@@ -8,7 +8,7 @@ import (
 
 func init() {
 	hatchet.RegisterEmbeddedBackend(func(ctx context.Context, cfg hatchet.EmbeddedConfig) (func(context.Context) error, error) {
-		inst, err := start(ctx, embeddedConfigToOptions(cfg)...)
+		inst, err := StartServer(ctx, embeddedConfigToOptions(cfg)...)
 		if err != nil {
 			return nil, err
 		}
