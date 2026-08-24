@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -27,9 +31,9 @@ jobs:
       - run: go build ./...
       - name: run examples/go
         run: |
-          out=$(timeout 300 go run ./examples/go)
-          echo "$out"
-          echo "$out" | grep -q "Hello, embed!"
+          timeout 300 go run ./examples/go > out.log 2>&1 || (cat out.log && exit 1)
+          cat out.log
+          grep -q "Hello, embed!" out.log
 
   examples-python:
     runs-on: ubuntu-latest
@@ -47,9 +51,9 @@ jobs:
         env:
           HATCHET_CLIENT_EMBEDDED_BINARY_PATH: /tmp/hatchet-embedded-sidecar
         run: |
-          out=$(timeout 300 python examples/python/main.py)
-          echo "$out"
-          echo "$out" | grep -q "Hello, embed!"
+          timeout 300 python examples/python/main.py > out.log 2>&1 || (cat out.log && exit 1)
+          cat out.log
+          grep -q "Hello, embed!" out.log
 
   examples-typescript:
     runs-on: ubuntu-latest
@@ -70,6 +74,6 @@ jobs:
         env:
           HATCHET_CLIENT_EMBEDDED_BINARY_PATH: /tmp/hatchet-embedded-sidecar
         run: |
-          out=$(timeout 300 pnpm start)
-          echo "$out"
-          echo "$out" | grep -q "Hello, embed!"
+          timeout 300 pnpm start > out.log 2>&1 || (cat out.log && exit 1)
+          cat out.log
+          grep -q "Hello, embed!" out.log
