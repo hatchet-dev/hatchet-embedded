@@ -5,7 +5,7 @@ go 1.26
 require (
 	github.com/fergusstrange/embedded-postgres v1.34.0
 	github.com/google/uuid v1.6.0
-	github.com/hatchet-dev/hatchet v0.102.2
+	github.com/hatchet-dev/hatchet v0.104.7
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/rs/zerolog v1.35.1
 )
@@ -25,7 +25,6 @@ require (
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/creasty/defaults v1.8.0 // indirect
-	github.com/doyensec/safeurl v0.2.4 // indirect
 	github.com/exaring/otelpgx v0.10.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
@@ -143,5 +142,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/hatchet-dev/hatchet => /Users/mnafees/git/hatchet-dev/hatchet-workstation/repos/hatchet
