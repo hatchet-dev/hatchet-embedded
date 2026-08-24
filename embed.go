@@ -153,11 +153,17 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	}
 
 	apiPort := 0
+	var apiPortHold net.Listener
 	if startServerAPI {
-		apiPort, err = resolveAPIPort(cfg.apiPort)
+		apiPort, apiPortHold, err = resolveAPIPort(cfg.apiPort)
 		if err != nil {
 			return nil, fmt.Errorf("could not allocate an API port: %w", err)
 		}
+		defer func() {
+			if err != nil && apiPortHold != nil {
+				_ = apiPortHold.Close()
+			}
+		}()
 	}
 
 	grpcBroadcast := fmt.Sprintf("127.0.0.1:%d", grpcPort)
@@ -255,6 +261,9 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	}()
 
 	if startServerAPI {
+		if apiPortHold != nil {
+			_ = apiPortHold.Close()
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -392,15 +401,15 @@ func randomHex(n int) (string, error) {
 // value avoids IANA-assigned services and the OS ephemeral range.
 const DefaultAPIPort = 28243
 
-func resolveAPIPort(explicit *int) (int, error) {
+func resolveAPIPort(explicit *int) (int, net.Listener, error) {
 	if explicit != nil {
-		return *explicit, nil
+		return *explicit, nil, nil
 	}
-	if l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", DefaultAPIPort)); err == nil {
-		_ = l.Close()
-		return DefaultAPIPort, nil
+	if l, err := net.Listen("tcp", fmt.Sprintf(":%d", DefaultAPIPort)); err == nil {
+		return DefaultAPIPort, l, nil
 	}
-	return freePort()
+	port, err := freePort()
+	return port, nil, err
 }
 
 func resolvePort(explicit *int) (int, error) {
