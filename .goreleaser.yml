@@ -47,7 +47,7 @@ notarize:
         key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
         key: "{{.Env.MACOS_NOTARY_KEY}}"
         wait: true
-        timeout: 20m
+        timeout: 60m
 
 # prerelease: auto would misclassify vX.Y.Z-N sidecar-fix tags as prereleases
 # and hide them from the "latest" release the SDKs resolve; engine prereleases
