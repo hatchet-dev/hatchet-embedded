@@ -24,8 +24,9 @@ def main() -> None:
     result = greet.run(GreetInput(name="embed"))
     print(result["greeting"], flush=True)
 
-    # the worker's subprocesses would otherwise keep the interpreter alive at
-    # exit; the sidecar still shuts down cleanly via its stdin pipe
+    hatchet.stop_embedded()
+
+    # the worker's subprocesses would otherwise keep the interpreter alive at exit
     os._exit(0)
 
 

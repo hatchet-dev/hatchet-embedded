@@ -15,6 +15,7 @@ async function main() {
   console.log(result.greeting);
 
   await worker.stop();
+  await hatchet.stopEmbedded();
   process.exit(0);
 }
 
