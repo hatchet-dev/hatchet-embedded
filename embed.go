@@ -192,8 +192,6 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 		scf.Runtime.Healthcheck = false
 		scf.Runtime.Embedded = true
 
-		scf.SecurityCheck.Enabled = false
-
 		if cfg.usePostgresMQ() {
 			scf.MessageQueue.Kind = "postgres"
 		} else {
