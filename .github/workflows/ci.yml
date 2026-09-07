@@ -46,6 +46,7 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
+            ~/.embedded-postgres-go
           key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
@@ -69,6 +70,7 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
+            ~/.embedded-postgres-go
           key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
@@ -96,6 +98,14 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # the sidecar downloads Postgres binaries from Maven Central on a cold
+      # cache; caching them insulates CI from transient Maven non-200s
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.embedded-postgres-go
+          key: ${{ runner.os }}-embedded-postgres-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-embedded-postgres-
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.13"
@@ -119,6 +129,7 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
+            ~/.embedded-postgres-go
           key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
