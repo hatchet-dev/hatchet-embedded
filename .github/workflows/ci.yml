@@ -46,6 +46,7 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
+            ~/.embedded-postgres-go
           key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
@@ -69,6 +70,7 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
+            ~/.embedded-postgres-go
           key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
@@ -85,6 +87,35 @@ jobs:
           cat out.log
           grep -q "Hello, embed!" out.log
 
+  # exercises the real release download path (version resolution, sidecar
+  # download, and checksum verification against the latest published release),
+  # which the other example jobs skip via HATCHET_CLIENT_EMBEDDED_BINARY_PATH.
+  # The SDK downloads from plain github.com release URLs, which need no
+  # authentication, so no GITHUB_TOKEN is plumbed through. Kept to a single
+  # platform with a generous timeout since it depends on the network.
+  examples-python-release-download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # the sidecar downloads Postgres binaries from Maven Central on a cold
+      # cache; caching them insulates CI from transient Maven non-200s
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.embedded-postgres-go
+          key: ${{ runner.os }}-embedded-postgres-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-embedded-postgres-
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
+      - run: pip install -r examples/python/requirements.txt
+      - name: run examples/python against the latest release
+        run: |
+          timeout 600 python examples/python/main.py > out.log 2>&1 || (cat out.log && exit 1)
+          cat out.log
+          grep -q "Hello, embed!" out.log
+
   examples-typescript:
     runs-on: ubuntu-latest
     steps:
@@ -98,6 +129,7 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
+            ~/.embedded-postgres-go
           key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-

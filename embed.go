@@ -97,6 +97,9 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 
 	lg := resolveLogger(cfg)
 
+	stopHeartbeat := startupHeartbeat(lg)
+	defer stopHeartbeat()
+
 	var pg *embeddedpostgres.EmbeddedPostgres
 	if strings.TrimSpace(cfg.postgresURL) == "" {
 		pg, cfg.postgresURL, err = startEmbeddedPostgres(lg, cfg.postgresDataDir)
@@ -335,6 +338,14 @@ func startEmbeddedPostgres(lg *zerolog.Logger, baseDir string) (*embeddedpostgre
 		}
 	}
 
+	needsDownload, needsInit := postgresFirstRunPhases(baseDir)
+	switch {
+	case needsDownload:
+		lg.Log().Msgf("first run: downloading a bundled Postgres to ~/.embedded-postgres-go and initializing it in %s (this can take a minute)", baseDir)
+	case needsInit:
+		lg.Log().Msgf("first run: initializing a bundled Postgres in %s (this can take a minute)", baseDir)
+	}
+
 	pg := embeddedpostgres.NewDatabase(
 		embeddedpostgres.DefaultConfig().
 			Port(uint32(port)).
@@ -351,6 +362,50 @@ func startEmbeddedPostgres(lg *zerolog.Logger, baseDir string) (*embeddedpostgre
 	url := fmt.Sprintf("postgres://postgres:postgres@localhost:%d/hatchet?sslmode=disable", port)
 	lg.Info().Msgf("started embedded Postgres on port %d with data in %s (pass WithPostgres to use your own)", port, baseDir)
 	return pg, url, nil
+}
+
+// postgresFirstRunPhases reports which slow first-run phases the bundled
+// Postgres will go through before it can accept connections: downloading its
+// binaries (no archive cached under ~/.embedded-postgres-go, the
+// embedded-postgres library's cache; the library exposes no download-progress
+// hook, so presence of any cached archive is the best available signal) and
+// initializing a fresh data directory under baseDir.
+func postgresFirstRunPhases(baseDir string) (needsDownload, needsInit bool) {
+	needsDownload = true
+	if home, err := os.UserHomeDir(); err == nil {
+		matches, _ := filepath.Glob(filepath.Join(home, ".embedded-postgres-go", "embedded-postgres-binaries-*.txz"))
+		needsDownload = len(matches) == 0
+	}
+
+	_, statErr := os.Stat(filepath.Join(baseDir, "data", "PG_VERSION"))
+	needsInit = statErr != nil
+
+	return needsDownload, needsInit
+}
+
+// startupHeartbeat logs a line every 30 seconds until the returned stop
+// function is called, so slow first runs (Postgres download, initdb,
+// migrations) do not look hung. Warm starts finish well within the first
+// interval and print nothing.
+func startupHeartbeat(lg *zerolog.Logger) func() {
+	start := time.Now()
+	done := make(chan struct{})
+
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				lg.Log().Msgf("still waiting for the embedded engine (%ds elapsed)", int(time.Since(start).Seconds()))
+			}
+		}
+	}()
+
+	var once sync.Once
+	return func() { once.Do(func() { close(done) }) }
 }
 
 // defaultPostgresBaseDir keys the bundled Postgres directory by the working
