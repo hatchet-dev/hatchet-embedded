@@ -21,9 +21,9 @@ import (
 	adminseed "github.com/hatchet-dev/hatchet/cmd/hatchet-admin/cli/seed"
 	api "github.com/hatchet-dev/hatchet/cmd/hatchet-api/api"
 	engine "github.com/hatchet-dev/hatchet/cmd/hatchet-engine/engine"
-	migrate "github.com/hatchet-dev/hatchet/cmd/hatchet-migrate/migrate"
 	"github.com/hatchet-dev/hatchet/pkg/config/loader"
 	"github.com/hatchet-dev/hatchet/pkg/config/server"
+	"github.com/hatchet-dev/hatchet/pkg/config/shared"
 	hatchet "github.com/hatchet-dev/hatchet/sdks/go"
 
 	"github.com/hatchet-dev/hatchet-embedded/keyset"
@@ -43,6 +43,10 @@ type Instance struct {
 
 	pg         *embeddedpostgres.EmbeddedPostgres
 	stopPGOnce sync.Once
+
+	// clientLogger is handed to the SDK client that Start builds, so client
+	// and worker output shares the embedded format and level
+	clientLogger *zerolog.Logger
 }
 
 func (i *Instance) Client() *hatchet.Client { return i.client }
@@ -122,6 +126,13 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	if err := os.Setenv("DATABASE_URL", cfg.postgresURL); err != nil {
 		return nil, fmt.Errorf("could not set DATABASE_URL: %w", err)
 	}
+
+	// the database logger is configured from the environment when the data
+	// layer loads, so it follows the embedded level and console format
+	logLevel := resolveLogLevel(cfg)
+	_ = os.Setenv("DATABASE_LOGGER_LEVEL", logLevel)
+	_ = os.Setenv("DATABASE_LOGGER_FORMAT", "console")
+
 	if cfg.adminEmail != nil && *cfg.adminEmail != "" {
 		_ = os.Setenv("ADMIN_EMAIL", *cfg.adminEmail)
 	}
@@ -130,7 +141,7 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	}
 
 	if cfg.runMigrations != nil && *cfg.runMigrations {
-		if migrateErr := migrate.RunMigrations(ctx); migrateErr != nil {
+		if migrateErr := runMigrations(ctx, lg); migrateErr != nil {
 			return nil, fmt.Errorf("could not run migrations: %w", migrateErr)
 		}
 	}
@@ -182,6 +193,13 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	}
 
 	override := func(scf *server.ServerConfigFile) {
+		// the engine, API, queue, and pgx-stats loggers share the embedded
+		// level and console format, so all output lands on stderr in one style
+		loggerCfg := shared.LoggerConfigFile{Level: logLevel, Format: "console"}
+		scf.Logger = loggerCfg
+		scf.AdditionalLoggers.Queue = loggerCfg
+		scf.AdditionalLoggers.PgxStats = loggerCfg
+
 		scf.Auth.Cookie.Domain = "localhost"
 		scf.Auth.Cookie.Insecure = true
 		scf.Auth.Cookie.Secrets = hashKey + " " + blockKey
@@ -291,9 +309,8 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	if startServerAPI {
 		_ = os.Setenv("HATCHET_CLIENT_SERVER_URL", apiURL)
 	}
-	if cfg.logLevel != nil && *cfg.logLevel != "" {
-		_ = os.Setenv("HATCHET_CLIENT_LOG_LEVEL", *cfg.logLevel)
-	}
+	_ = os.Setenv("HATCHET_CLIENT_LOG_LEVEL", logLevel)
+	_ = os.Setenv("HATCHET_CLIENT_LOG_FORMAT", "console")
 
 	fleetStatus := "starting a new fleet"
 	if fleetSize > 0 {
@@ -303,7 +320,7 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	if startServerAPI {
 		apiStatus = apiURL
 	}
-	lg.Log().Msgf("engine ready: grpc=%s api=%s | %s", grpcBroadcast, apiStatus, fleetStatus)
+	lg.Info().Msgf("engine ready: grpc=%s api=%s | %s", grpcBroadcast, apiStatus, fleetStatus)
 
 	instanceAPIURL := ""
 	if startServerAPI {
@@ -311,14 +328,15 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	}
 
 	return &Instance{
-		token:       tok.Token,
-		tenantID:    tenantID,
-		apiURL:      instanceAPIURL,
-		grpcAddress: grpcBroadcast,
-		interruptCh: interruptCh,
-		cancel:      cancel,
-		wg:          wg,
-		pg:          pg,
+		token:        tok.Token,
+		tenantID:     tenantID,
+		apiURL:       instanceAPIURL,
+		grpcAddress:  grpcBroadcast,
+		interruptCh:  interruptCh,
+		cancel:       cancel,
+		wg:           wg,
+		pg:           pg,
+		clientLogger: clientLogger(cfg),
 	}, nil
 }
 
@@ -341,9 +359,9 @@ func startEmbeddedPostgres(lg *zerolog.Logger, baseDir string) (*embeddedpostgre
 	needsDownload, needsInit := postgresFirstRunPhases(baseDir)
 	switch {
 	case needsDownload:
-		lg.Log().Msgf("first run: downloading a bundled Postgres to ~/.embedded-postgres-go and initializing it in %s (this can take a minute)", baseDir)
+		lg.Info().Msgf("first run: downloading a bundled Postgres to ~/.embedded-postgres-go and initializing it in %s (this can take a minute)", baseDir)
 	case needsInit:
-		lg.Log().Msgf("first run: initializing a bundled Postgres in %s (this can take a minute)", baseDir)
+		lg.Info().Msgf("first run: initializing a bundled Postgres in %s (this can take a minute)", baseDir)
 	}
 
 	pg := embeddedpostgres.NewDatabase(
@@ -399,7 +417,7 @@ func startupHeartbeat(lg *zerolog.Logger) func() {
 			case <-done:
 				return
 			case <-ticker.C:
-				lg.Log().Msgf("still waiting for the embedded engine (%ds elapsed)", int(time.Since(start).Seconds()))
+				lg.Info().Msgf("still waiting for the embedded engine (%ds elapsed)", int(time.Since(start).Seconds()))
 			}
 		}
 	}()
@@ -430,7 +448,7 @@ func Start(ctx context.Context, opts ...Option) (*Instance, error) {
 		return nil, err
 	}
 
-	client, err := hatchet.NewClient()
+	client, err := hatchet.NewClient(hatchet.WithClientLogger(inst.clientLogger))
 	if err != nil {
 		_ = inst.Shutdown(context.Background())
 		return nil, fmt.Errorf("could not build embedded client: %w", err)
