@@ -8,6 +8,8 @@ require (
 	github.com/hatchet-dev/hatchet v0.106.5
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/rs/zerolog v1.35.1
+	github.com/spf13/viper v1.21.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -104,7 +106,6 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/spf13/viper v1.21.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tink-crypto/tink-go v0.0.0-20230613075026-d6de17e3f164 // indirect
 	github.com/tink-crypto/tink-go-gcpkms v0.0.0-20230602082706-31d0d09ccc8d // indirect
@@ -140,5 +141,4 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

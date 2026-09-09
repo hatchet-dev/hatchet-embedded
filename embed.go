@@ -41,6 +41,9 @@ type Instance struct {
 	wg           *sync.WaitGroup
 	shutdownOnce sync.Once
 
+	lg                *zerolog.Logger
+	profileRegistered bool
+
 	pg         *embeddedpostgres.EmbeddedPostgres
 	stopPGOnce sync.Once
 }
@@ -57,6 +60,17 @@ func (i *Instance) GRPCAddress() string { return i.grpcAddress }
 
 func (i *Instance) Shutdown(ctx context.Context) error {
 	i.shutdownOnce.Do(func() {
+		// Remove the CLI profile registration first, so tooling stops
+		// discovering an engine that is about to go away. Token matched: a
+		// newer instance's registration is never deleted.
+		if i.profileRegistered {
+			if removed, path, err := deregisterEmbeddedProfile(i.token); err != nil {
+				i.lg.Warn().Err(err).Msg("could not remove the embedded CLI profile registration")
+			} else if removed {
+				i.lg.Debug().Msgf("removed the %q CLI profile from %s", embeddedProfileName, path)
+			}
+		}
+
 		i.cancel()
 		close(i.interruptCh)
 	})
@@ -310,15 +324,37 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 		instanceAPIURL = apiURL
 	}
 
+	// Register this instance as the "embedded" CLI profile so the hatchet CLI
+	// and its MCP server can discover it. Best effort: a failure (for example
+	// an unwritable home directory) never fails startup. Skipped without the
+	// API server, since a profile without an API URL is not usable by the CLI.
+	profileRegistered := false
+	if startServerAPI {
+		if profilePath, regErr := registerEmbeddedProfile(embeddedRegistration{
+			tenantID:    tenantID,
+			token:       tok.Token,
+			apiURL:      apiURL,
+			grpcAddress: grpcBroadcast,
+			expiresAt:   expiresAt,
+		}); regErr != nil {
+			lg.Warn().Err(regErr).Msg("could not register the embedded engine as a CLI profile; continuing without it")
+		} else {
+			profileRegistered = true
+			lg.Info().Msgf("registered the %q CLI profile in %s", embeddedProfileName, profilePath)
+		}
+	}
+
 	return &Instance{
-		token:       tok.Token,
-		tenantID:    tenantID,
-		apiURL:      instanceAPIURL,
-		grpcAddress: grpcBroadcast,
-		interruptCh: interruptCh,
-		cancel:      cancel,
-		wg:          wg,
-		pg:          pg,
+		token:             tok.Token,
+		tenantID:          tenantID,
+		apiURL:            instanceAPIURL,
+		grpcAddress:       grpcBroadcast,
+		interruptCh:       interruptCh,
+		cancel:            cancel,
+		wg:                wg,
+		pg:                pg,
+		lg:                lg,
+		profileRegistered: profileRegistered,
 	}, nil
 }
 
