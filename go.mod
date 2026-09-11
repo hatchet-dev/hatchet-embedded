@@ -5,8 +5,9 @@ go 1.26.0
 require (
 	github.com/fergusstrange/embedded-postgres v1.34.0
 	github.com/google/uuid v1.6.0
-	github.com/hatchet-dev/hatchet v0.106.5
+	github.com/hatchet-dev/hatchet v0.106.11
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/pressly/goose/v3 v3.27.3
 	github.com/rs/zerolog v1.35.1
 )
 
@@ -88,7 +89,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/posthog/posthog-go v1.24.4 // indirect
-	github.com/pressly/goose/v3 v3.27.3 // indirect
 	github.com/prometheus/client_golang v1.24.1 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
 	github.com/prometheus/common v0.70.1 // indirect
