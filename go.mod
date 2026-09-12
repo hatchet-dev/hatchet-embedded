@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/fergusstrange/embedded-postgres v1.34.0
 	github.com/google/uuid v1.6.0
-	github.com/hatchet-dev/hatchet v0.106.5
+	github.com/hatchet-dev/hatchet v0.106.11
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/rs/zerolog v1.35.1
 )
