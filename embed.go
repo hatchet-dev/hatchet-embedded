@@ -271,7 +271,7 @@ func StartServer(ctx context.Context, opts ...Option) (inst *Instance, err error
 	}
 
 	expiresAt := time.Now().UTC().Add(90 * 24 * time.Hour)
-	tok, err := sc.Auth.JWTManager.GenerateTenantToken(ctx, parsedTenantID, "embedded", false, &expiresAt)
+	tok, err := sc.Auth.JWTManager.GenerateTenantToken(ctx, parsedTenantID, "embedded", false, false, &expiresAt)
 
 	_ = tokenCleanup()
 	_ = sc.Disconnect()
