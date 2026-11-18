@@ -1,0 +1,113 @@
+name: Bump Hatchet
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Hatchet tag to release (default is the latest stable tag)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  SERVER_SECURITY_CHECK_ENABLED: "false"
+
+concurrency:
+  group: bump-hatchet
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # the sidecar for the engine version hatchet marks as its latest OSS
+      # release is the one the SDKs download, so when that marking moves to a
+      # version already released here the matching release is promoted
+      - name: Promote the OSS latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          oss=$(gh api 'repos/hatchet-dev/hatchet/releases?per_page=100' \
+            --jq '.[] | select(.draft or .prerelease | not) | .tag_name' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          want=$(gh release list --json tagName --jq '.[].tagName' \
+            | grep -E "^${oss}(-[0-9]+)?$" | sort -V | tail -1)
+          have=$(gh release view --json tagName --jq .tagName || true)
+          echo "hatchet OSS latest is $oss, ours is $have"
+          if [ -n "$want" ] && [ "$want" != "$have" ]; then
+            gh release edit "$want" --latest
+          fi
+
+      - name: Resolve hatchet tag
+        id: latest
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          tag="$TAG"
+          if [ -z "$tag" ]; then
+            tag=$(git ls-remote --tags --refs https://github.com/hatchet-dev/hatchet 'v*' \
+              | awk -F/ '{print $NF}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          fi
+          echo "hatchet tag is $tag"
+          [ -n "$tag" ]
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag already released"
+            exit 0
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - if: steps.latest.outputs.tag
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - if: steps.latest.outputs.tag
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            ~/.embedded-postgres-go
+          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - if: steps.latest.outputs.tag
+        name: Bump and verify
+        id: bump
+        run: |
+          echo "current=$(go list -m -f '{{.Version}}' github.com/hatchet-dev/hatchet)" >> "$GITHUB_OUTPUT"
+          go get "github.com/hatchet-dev/hatchet@${{ steps.latest.outputs.tag }}"
+          go mod tidy
+          go build ./...
+          go test ./...
+          timeout 300 go run ./examples/go > out.log 2>&1 || (cat out.log && exit 1)
+          grep -q "Hello, embed!" out.log
+
+      # tags pushed with GITHUB_TOKEN do not trigger on.push workflows, so the
+      # release is dispatched explicitly. main only moves forward, so releasing
+      # an older tag by hand tags a commit off main without downgrading it
+      - if: steps.latest.outputs.tag
+        name: Commit, tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.latest.outputs.tag }}
+          CURRENT: ${{ steps.bump.outputs.current }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add go.mod go.sum
+          git diff --cached --quiet || git commit -m "bump hatchet to $TAG"
+          git tag "$TAG"
+          git push origin "$TAG"
+          if [ "$(printf '%s\n%s\n' "$CURRENT" "$TAG" | sort -V | tail -1)" = "$TAG" ]; then
+            git push origin HEAD:main
+          fi
+          gh workflow run release.yml -f "tag=$TAG"

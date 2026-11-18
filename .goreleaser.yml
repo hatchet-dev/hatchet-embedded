@@ -57,3 +57,4 @@ release:
     owner: hatchet-dev
     name: hatchet-embedded
   prerelease: "false"
+  make_latest: "{{ .Env.MAKE_LATEST }}"
