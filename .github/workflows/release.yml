@@ -58,6 +58,19 @@ jobs:
               ;;
           esac
 
+      # only the sidecar for the engine version hatchet itself marks as its
+      # latest OSS release becomes the latest release the SDKs download
+      - name: Decide whether this release is latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          oss=$(gh api 'repos/hatchet-dev/hatchet/releases?per_page=100' \
+            --jq '.[] | select(.draft or .prerelease | not) | .tag_name' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          if [ "${GITHUB_TAG%%-*}" = "$oss" ]; then make_latest=true; else make_latest=false; fi
+          echo "hatchet OSS latest is $oss, make_latest=$make_latest"
+          echo "MAKE_LATEST=$make_latest" >> "$GITHUB_ENV"
+
       - name: Install quill (for macOS code signing)
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/quill/main/install.sh | sh -s -- -b /usr/local/bin
